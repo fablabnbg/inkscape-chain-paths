@@ -28,6 +28,7 @@ inkex.localize()
 
 from optparse import SUPPRESS_HELP
 
+
 class ChainPaths(inkex.Effect):
   """
   Inkscape Extension make long continuous paths from smaller parts
@@ -40,6 +41,7 @@ class ChainPaths(inkex.Effect):
     # values of the document's <svg> width and height attributes as well
     # as establishing a transform from the viewbox to the display.
     self.chain_epsilon = 0.01
+    self.segments_done = {}
 
     self.dumpname= os.path.join(tempfile.gettempdir(), "chain_paths.dump")
 
@@ -61,23 +63,90 @@ class ChainPaths(inkex.Effect):
   def author(self):
     return __author__
 
+  def reverse_segment(self, seg):
+    r = []
+    for s in reversed(seg):
+      # s has 3 elements: handle1, point, handle2
+      # Swap handles.
+      s.reverse()
+      r.append(s)
+    return r
+
+  def set_segment_done(self, id, n):
+    if not id in self.segments_done:
+      self.segments_done[id] = {}
+    self.segments_done[id][n] = true
+
+  def is_segment_done(self, id, n):
+    if not id in self.segments_done:
+      return False
+    if n in self.segments_done[id]:
+      return True
+    return False
+
+
+  def near(self, end1, end2):
+    dx = end1[0] - end2[0]
+    dy = end1[1] - end2[0]
+    if dx > self.chain_epsilon or dy > self.chain_epsilon:
+      return False
+    if dx * dx + dy * dy > self.chain_epsilon * self.chain_epsilon:
+      return False
+    else:
+      return True
+
 
   def effect(self):
     if self.options.version:
       print __version__
       sys.exit(0)
+    if not len(self.selected.items()):
+      inkex.errormsg(_("Please select one or more objects."))
+      return
+
+    segments = []
     for id, node in self.selected.iteritems():
       if node.tag != inkex.addNS('path','svg'):
-        inkex.errormsg(_("Object "+id+" is not a path. Try\n  - Path->Object to Path\n  - Object->Ungroup\n\n------------------------\n"))
+        inkex.errormsg(_("Object "+id+" is not a path. Try\n  - Path->Object to Path\n  - Object->Ungroup"))
+        return
       print >>self.tty, "id="+str(id), "tag="+str(node.tag)
       path_d = cubicsuperpath.parsePath(node.get('d'))
       path_style = simplestyle.parseStyle(node.get('style'))
-      new = []
+      sub_idx = -1
       for sub in path_d:
+        sub_idx += 1
+	# sub=[[[200.0, 300.0], [200.0, 300.0], [175.0, 290.0]], [[175.0, 265.0], [220.37694, 256.99876], [175.0, 240.0]], [[175.0, 215.0], [200.0, 200.0], [200.0, 200.0]]]
+	# this is a path of three points. All the bezier handles are included. the Structure is:
+	# [[handle0_x, point0, handle0_1], [handle1_0, point1, handle1_2], [handle2_1, point2, handle2_x]]
         print >>self.tty, "   sub="+str(sub)
+	segments.append({'id': id, 'n': sub_idx, 'end1': [sub[0][1][0],sub[0][1][1]], 'end2':[sub[-1][1][0],sub[-1][1][1]], 'sub': sub})
       node.set('style', simplestyle.formatStyle(path_style))
       if node.get(inkex.addNS('type','sodipodi')):
         del node.attrib[inkex.addNS('type', 'sodipodi')]
+    print >>self.tty, "-------- seen:"
+    for s in segments:
+      print >>self.tty, s['id'],s['n'],s['end1'],s['end2']
+
+    # chain the segments
+    for id, node in self.selected.iteritems():
+      path_d = cubicsuperpath.parsePath(node.get('d'))
+      path_style = simplestyle.parseStyle(node.get('style'))
+      new=[]
+      sub_idx = -1
+      for sub in path_d:
+        sub_idx += 1
+	if not self.is_segment_done(id, sub_idx):
+	  # Sub-quadratic algorithm: we check both ends of the current segment.
+	  # If one of them is near() another known end from the segments list, we
+	  # chain this segment to the current segment and remove it from the
+	  # list,
+	  # end1-end1 or end2-end2: The new segment is reversed.
+	  # end1-end2: The new segment is prepended to the current segment.
+	  # end2-end1: The new segment is appended to the current segment.
+	  pass
+      if not len(new):
+        node.getparent().remove(node)
+      node.set('d',cubicsuperpath.formatPath(new))
 
 if __name__ == '__main__':
         e = ChainPaths()
