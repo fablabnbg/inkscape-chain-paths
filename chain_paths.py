@@ -21,8 +21,6 @@ import sys, os, shutil, time, logging, tempfile
 # local library
 import inkex
 import cubicsuperpath
-import bezmisc
-import simplestyle
 
 inkex.localize()
 
@@ -41,6 +39,7 @@ class ChainPaths(inkex.Effect):
     # values of the document's <svg> width and height attributes as well
     # as establishing a transform from the viewbox to the display.
     self.chain_epsilon = 0.01
+    self.snap_ends = False
     self.segments_done = {}
 
     self.dumpname= os.path.join(tempfile.gettempdir(), "chain_paths.dump")
@@ -54,7 +53,7 @@ class ChainPaths(inkex.Effect):
     self.OptionParser.add_option('-V', '--version',
           action = 'store_const', const=True, dest = 'version', default = False,
           help='Just print version number ("'+__version__+'") and exit.')
-    self.OptionParser.add_option('-s', '--snap', action = 'store', dest = 'snap', type = 'inkbool', default = False, help='snap end-points together when connecting')
+    self.OptionParser.add_option('-s', '--snap', action = 'store', dest = 'snap_ends', type = 'inkbool', default = False, help='snap end-points together when connecting')
     self.OptionParser.add_option('-e', '--epsilon', action = 'store',
           type = 'float', dest = 'chain_epsilon', default = 0.01, help="Max. distance to connect [mm]")
 
@@ -75,7 +74,7 @@ class ChainPaths(inkex.Effect):
   def set_segment_done(self, id, n):
     if not id in self.segments_done:
       self.segments_done[id] = {}
-    self.segments_done[id][n] = true
+    self.segments_done[id][n] = True
 
   def is_segment_done(self, id, n):
     if not id in self.segments_done:
@@ -84,10 +83,26 @@ class ChainPaths(inkex.Effect):
       return True
     return False
 
+  def link_segments(self, seg1, seg2):
+    if self.snap_ends:
+      seg = seg1[:-1]
+      p1 = seg1[-1]
+      p2 = seg2[0]
+      # fuse p1 and p2 to create one new point:
+      # first handle from p1, point coordinates averaged, second handle from p2
+      seg.append([ [ p1[0][0]             ,  p1[0][1]             ],
+                   [(p1[1][0]+p2[1][0])*.5, (p1[1][1]+p2[1][1])*.5],
+		   [          p2[2][0]    ,           p2[2][1]    ] ])
+      seg.extend(seg2[1:])
+    else:
+      seg = seg1[:]
+      seg.extend(seg2[:])
+    return seg
 
-  def near(self, end1, end2):
+
+  def near_ends(self, end1, end2):
     dx = end1[0] - end2[0]
-    dy = end1[1] - end2[0]
+    dy = end1[1] - end2[1]
     if dx > self.chain_epsilon or dy > self.chain_epsilon:
       return False
     if dx * dx + dy * dy > self.chain_epsilon * self.chain_epsilon:
@@ -111,7 +126,6 @@ class ChainPaths(inkex.Effect):
         return
       print >>self.tty, "id="+str(id), "tag="+str(node.tag)
       path_d = cubicsuperpath.parsePath(node.get('d'))
-      path_style = simplestyle.parseStyle(node.get('style'))
       sub_idx = -1
       for sub in path_d:
         sub_idx += 1
@@ -119,8 +133,7 @@ class ChainPaths(inkex.Effect):
 	# this is a path of three points. All the bezier handles are included. the Structure is:
 	# [[handle0_x, point0, handle0_1], [handle1_0, point1, handle1_2], [handle2_1, point2, handle2_x]]
         print >>self.tty, "   sub="+str(sub)
-	segments.append({'id': id, 'n': sub_idx, 'end1': [sub[0][1][0],sub[0][1][1]], 'end2':[sub[-1][1][0],sub[-1][1][1]], 'sub': sub})
-      node.set('style', simplestyle.formatStyle(path_style))
+	segments.append({'id': id, 'n': sub_idx, 'end1': [sub[0][1][0],sub[0][1][1]], 'end2':[sub[-1][1][0],sub[-1][1][1]], 'seg': sub})
       if node.get(inkex.addNS('type','sodipodi')):
         del node.attrib[inkex.addNS('type', 'sodipodi')]
     print >>self.tty, "-------- seen:"
@@ -128,25 +141,54 @@ class ChainPaths(inkex.Effect):
       print >>self.tty, s['id'],s['n'],s['end1'],s['end2']
 
     # chain the segments
+    obsoleted = 0
+    remaining = 0
     for id, node in self.selected.iteritems():
+      # path_style = simplestyle.parseStyle(node.get('style'))
       path_d = cubicsuperpath.parsePath(node.get('d'))
-      path_style = simplestyle.parseStyle(node.get('style'))
       new=[]
-      sub_idx = -1
-      for sub in path_d:
-        sub_idx += 1
-	if not self.is_segment_done(id, sub_idx):
-	  # Sub-quadratic algorithm: we check both ends of the current segment.
-	  # If one of them is near() another known end from the segments list, we
+      cur_idx = -1
+      for cur in path_d:
+        cur_idx += 1
+	if not self.is_segment_done(id, cur_idx):
+	  # quadratic algorithm: we check both ends of the current segment.
+	  # If one of them is near another known end from the segments list, we
 	  # chain this segment to the current segment and remove it from the
 	  # list,
 	  # end1-end1 or end2-end2: The new segment is reversed.
 	  # end1-end2: The new segment is prepended to the current segment.
 	  # end2-end1: The new segment is appended to the current segment.
-	  pass
+	  self.set_segment_done(id, cur_idx)	# do not cross with ourselves.
+	  end1=[cur[0][1][0],cur[0][1][1]]
+	  end2=[cur[-1][1][0],cur[-1][1][1]]
+	  for seg in segments:
+	    if self.is_segment_done(seg['id'], seg['n']):
+	      continue
+
+	    if (self.near_ends(end1, seg['end1']) or 
+	        self.near_ends(end2, seg['end2'])):
+	      seg['seg'] = self.reverse_segment(seg['seg'])
+	      seg['end1'],seg['end2'] = seg['end2'],seg['end1']
+	      print >>self.tty, "reversed seg", seg['id'], seg['n']
+
+	    if self.near_ends(end1, seg['end2']):
+	      # prepend seg to cur
+	      cur = self.link_segments(seg['seg'], cur)
+	      self.set_segment_done(seg['id'], seg['n'])
+	    elif self.near_ends(end2, seg['end1']):
+	      # append seg to cur
+	      cur = self.link_segments(cur, seg['seg'])
+	      self.set_segment_done(seg['id'], seg['n'])
+	  new.append(cur)
+
       if not len(new):
-        node.getparent().remove(node)
-      node.set('d',cubicsuperpath.formatPath(new))
+        node.clear()
+        # node.getparent().remove(node)
+	obsoleted += 1
+      else:
+        remaining += 1
+        node.set('d',cubicsuperpath.formatPath(new))
+    print >>self.tty, "Path nodes obsoleted:", obsoleted, "\nPath nodes remaining:", remaining
 
 if __name__ == '__main__':
         e = ChainPaths()
