@@ -6,10 +6,20 @@
   <dependency type="executable" location="extensions">inkex.py</dependency>
   <dependency type="executable" location="extensions">chain_paths.py</dependency>
 
-  <param name="epsilon" type="float" min="0.00" max="999.99" _gui-text="Max. distance to connect [mm]">0.01</param>
-  <param name="snap" type="boolean" _gui-text="Snap end-points together when connecting">false</param>
-  <!-- Keep in sync with chain_paths.py line 16 __version__ = ... -->
-  <param name="about_version" type="description">Version 0.3</param>
+  <param name="epsilon" type="float" min="0.001" max="999.999" precision="3" _gui-text="Max. distance to connect">0.01</param>
+  <param name="units" type="optiongroup" appearance="minimal" _gui-text=" ">
+	<option value="mm">mm</option>
+	<option value="cm">cm</option>
+	<option value="in">in</option>
+	<option value="pt">pt</option>
+	<option value="px">px</option></param>
+  <param name="snap" type="boolean" _gui-text="Snap connecting ends together">false</param>
+  <!-- Keep in sync with chain_paths.py line 19 __version__ = ... -->
+  <param name="about_version" type="description">
+  
+  
+  https://github.com/fablabnbg/inkscape-chain-paths
+  Version 0.4</param>
 
   <effect needs-live-preview="false" >
     <object-type>path</object-type>

@@ -14,14 +14,12 @@
 # 2015-11-15 jw, V0.1 -- initial draught
 # 2015-11-16 jw, V0.2 -- fixed endpoints after chaining.
 # 2015-11-16 jw, V0.3 -- all possible chains connected. Yeah
-#
-# TODO: * GUI has no effect.
-#       * GUI does not show 0.01, but rounds down to 0.0
+# 2015-11-16 jw, V0.4 -- gui fully functional.
 
-__version__ = '0.3'	# Keep in sync with chain_paths.inx ca line 12
+__version__ = '0.4'	# Keep in sync with chain_paths.inx ca line 22
 __author__ = 'Juergen Weigert <juewei@fabfolk.com>'
 
-import sys, os, shutil, time, logging, tempfile
+import sys, os, shutil, time, logging, tempfile, math
 
 # local library
 import inkex
@@ -31,6 +29,13 @@ inkex.localize()
 
 from optparse import SUPPRESS_HELP
 
+debug = False
+
+def uutounit(self,nn,uu):
+  try:
+    return self.uutounit(nn,uu)		# inkscape 0.91
+  except:
+    return inkex.uutounit(nn,uu)	# inkscape 0.48
 
 class ChainPaths(inkex.Effect):
   """
@@ -44,8 +49,10 @@ class ChainPaths(inkex.Effect):
     # values of the document's <svg> width and height attributes as well
     # as establishing a transform from the viewbox to the display.
     self.chain_epsilon = 0.01
-    self.snap_ends = False
+    self.snap_ends = True
     self.segments_done = {}
+    self.min_missed_distance_sq = None
+    self.chained_count = 0
 
     self.dumpname= os.path.join(tempfile.gettempdir(), "chain_paths.dump")
 
@@ -53,19 +60,29 @@ class ChainPaths(inkex.Effect):
       self.tty = open("/dev/tty", 'w')
     except:
       self.tty = open(os.devnull, 'w')  # '/dev/null' for POSIX, 'nul' for Windows.
-    print >>self.tty, "__init__"
+    if debug: print >>self.tty, "__init__"
 
     self.OptionParser.add_option('-V', '--version',
-          action = 'store_const', const=True, dest = 'version', default = False,
+          action = 'store_const', const=True, dest='version', default=False,
           help='Just print version number ("'+__version__+'") and exit.')
-    self.OptionParser.add_option('-s', '--snap', action = 'store', dest = 'snap_ends', type = 'inkbool', default = False, help='snap end-points together when connecting')
-    self.OptionParser.add_option('-e', '--epsilon', action = 'store',
-          type = 'float', dest = 'chain_epsilon', default = 0.01, help="Max. distance to connect [mm]")
+    self.OptionParser.add_option('-s', '--snap', action='store', dest='snap_ends', type='inkbool', default=True, help='snap end-points together when connecting')
+    self.OptionParser.add_option('-u', '--units', action='store', dest="units", type="string", default="mm", help="measurement unit for epsilon")
+    self.OptionParser.add_option('-e', '--epsilon', action='store',
+          type='float', dest='chain_epsilon', default=0.01, help="Max. distance to connect [mm]")
 
   def version(self):
     return __version__
   def author(self):
     return __author__
+
+  def calc_unit_factor(self, units='mm'):
+        """ return the scale factor for all dimension conversions.
+            - The document units are always irrelevant as
+              everything in inkscape is expected to be in 90dpi pixel units
+        """
+        dialog_units = uutounit(self, 1.0, units)
+        self.unit_factor = 1.0 / dialog_units
+        return self.unit_factor
 
   def reverse_segment(self, seg):
     r = []
@@ -80,7 +97,7 @@ class ChainPaths(inkex.Effect):
     if not id in self.segments_done:
       self.segments_done[id] = {}
     self.segments_done[id][n] = True
-    print >>self.tty, "done", id, n, msg
+    if debug: print >>self.tty, "done", id, n, msg
 
   def is_segment_done(self, id, n):
     if not id in self.segments_done:
@@ -103,15 +120,20 @@ class ChainPaths(inkex.Effect):
     else:
       seg = seg1[:]
       seg.extend(seg2[:])
+    self.chained_count += 1
     return seg
 
 
   def near_ends(self, end1, end2):
+    """ requires self.eps_sq to be the square of the near distance """
     dx = end1[0] - end2[0]
     dy = end1[1] - end2[1]
-    if dx > self.chain_epsilon or dy > self.chain_epsilon:
-      return False
-    if dx * dx + dy * dy > self.chain_epsilon * self.chain_epsilon:
+    d_sq = dx * dx + dy * dy
+    if d_sq > self.eps_sq:
+      if self.min_missed_distance_sq is None:
+        self.min_missed_distance_sq = d_sq
+      elif self.min_missed_distance_sq > d_sq:
+        self.min_missed_distance_sq = d_sq
       return False
     else:
       return True
@@ -121,6 +143,14 @@ class ChainPaths(inkex.Effect):
     if self.options.version:
       print __version__
       sys.exit(0)
+
+    self.calc_unit_factor(self.options.units)
+
+    if self.options.snap_ends     is not None: self.snap_ends     = self.options.snap_ends
+    if self.options.chain_epsilon is not None: self.chain_epsilon = self.options.chain_epsilon
+    if self.chain_epsilon < 0.001: self.chain_epsilon = 0.001	# keep a minimum.
+    self.eps_sq = self.chain_epsilon * self.unit_factor * self.chain_epsilon * self.unit_factor
+
     if not len(self.selected.items()):
       inkex.errormsg(_("Please select one or more objects."))
       return
@@ -130,7 +160,7 @@ class ChainPaths(inkex.Effect):
       if node.tag != inkex.addNS('path','svg'):
         inkex.errormsg(_("Object "+id+" is not a path. Try\n  - Path->Object to Path\n  - Object->Ungroup"))
         return
-      print >>self.tty, "id="+str(id), "tag="+str(node.tag)
+      if debug: print >>self.tty, "id="+str(id), "tag="+str(node.tag)
       path_d = cubicsuperpath.parsePath(node.get('d'))
       sub_idx = -1
       for sub in path_d:
@@ -138,13 +168,13 @@ class ChainPaths(inkex.Effect):
 	# sub=[[[200.0, 300.0], [200.0, 300.0], [175.0, 290.0]], [[175.0, 265.0], [220.37694, 256.99876], [175.0, 240.0]], [[175.0, 215.0], [200.0, 200.0], [200.0, 200.0]]]
 	# this is a path of three points. All the bezier handles are included. the Structure is:
 	# [[handle0_x, point0, handle0_1], [handle1_0, point1, handle1_2], [handle2_1, point2, handle2_x]]
-        print >>self.tty, "   sub="+str(sub)
+        if debug: print >>self.tty, "   sub="+str(sub)
 	segments.append({'id': id, 'n': sub_idx, 'end1': [sub[0][1][0],sub[0][1][1]], 'end2':[sub[-1][1][0],sub[-1][1][1]], 'seg': sub})
       if node.get(inkex.addNS('type','sodipodi')):
         del node.attrib[inkex.addNS('type', 'sodipodi')]
-    print >>self.tty, "-------- seen:"
+    if debug: print >>self.tty, "-------- seen:"
     for s in segments:
-      print >>self.tty, s['id'],s['n'],s['end1'],s['end2']
+      if debug: print >>self.tty, s['id'],s['n'],s['end1'],s['end2']
 
     # chain the segments
     obsoleted = 0
@@ -174,11 +204,11 @@ class ChainPaths(inkex.Effect):
 	      segments_idx += 1
 	      continue
 
-	    if (self.near_ends(end1, seg['end1']) or 
+	    if (self.near_ends(end1, seg['end1']) or
 	        self.near_ends(end2, seg['end2'])):
 	      seg['seg'] = self.reverse_segment(seg['seg'])
 	      seg['end1'],seg['end2'] = seg['end2'],seg['end1']
-	      print >>self.tty, "reversed seg", seg['id'], seg['n']
+	      if debug: print >>self.tty, "reversed seg", seg['id'], seg['n']
 
 	    if self.near_ends(end1, seg['end2']):
 	      # prepend seg to cur
@@ -195,21 +225,25 @@ class ChainPaths(inkex.Effect):
 	      end2=[cur[-1][1][0],cur[-1][1][1]]
 	      segments_idx = 0
 	      continue
-	    
+
 	    segments_idx += 1
 
 	  new.append(cur)
 
       if not len(new):
-        node.clear()
-        # node.getparent().remove(node)
+        # node.clear()
+        node.getparent().remove(node)
 	obsoleted += 1
-        print >>self.tty, "Path node obsoleted:", id
+        if debug: print >>self.tty, "Path node obsoleted:", id
       else:
         remaining += 1
         node.set('d',cubicsuperpath.formatPath(new))
+
+    # statistics:
     print >>self.tty, "Path nodes obsoleted:", obsoleted, "\nPath nodes remaining:", remaining
-    print >>self.tty, "done", self.segments_done
+    if self.min_missed_distance_sq is not None:
+      print >>self.tty, "min_missed_distance:", math.sqrt(float(self.min_missed_distance_sq))/self.unit_factor, '>', self.chain_epsilon, self.options.units
+    print >>self.tty, "Successful link operations: ", self.chained_count
 
 if __name__ == '__main__':
         e = ChainPaths()
