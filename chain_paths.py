@@ -13,10 +13,12 @@
 #
 # 2015-11-15 jw, V0.1 -- initial draught
 # 2015-11-16 jw, V0.2 -- fixed endpoints after chaining.
+# 2015-11-16 jw, V0.3 -- all possible chains connected. Yeah
 #
-# TODO: nicolaus_flat.svg:path4729 gets reversed, but not chained
+# TODO: * GUI has no effect.
+#       * GUI does not show 0.01, but rounds down to 0.0
 
-__version__ = '0.2'	# Keep in sync with chain_paths.inx ca line 12
+__version__ = '0.3'	# Keep in sync with chain_paths.inx ca line 12
 __author__ = 'Juergen Weigert <juewei@fabfolk.com>'
 
 import sys, os, shutil, time, logging, tempfile
@@ -74,10 +76,11 @@ class ChainPaths(inkex.Effect):
       r.append(s)
     return r
 
-  def set_segment_done(self, id, n):
+  def set_segment_done(self, id, n, msg=''):
     if not id in self.segments_done:
       self.segments_done[id] = {}
     self.segments_done[id][n] = True
+    print >>self.tty, "done", id, n, msg
 
   def is_segment_done(self, id, n):
     if not id in self.segments_done:
@@ -161,11 +164,14 @@ class ChainPaths(inkex.Effect):
 	  # end1-end1 or end2-end2: The new segment is reversed.
 	  # end1-end2: The new segment is prepended to the current segment.
 	  # end2-end1: The new segment is appended to the current segment.
-	  self.set_segment_done(id, cur_idx)	# do not cross with ourselves.
+	  self.set_segment_done(id, cur_idx, "output")	# do not cross with ourselves.
 	  end1=[cur[0][1][0],cur[0][1][1]]
 	  end2=[cur[-1][1][0],cur[-1][1][1]]
-	  for seg in segments:
+	  segments_idx = 0
+	  while segments_idx < len(segments):
+	    seg = segments[segments_idx]
 	    if self.is_segment_done(seg['id'], seg['n']):
+	      segments_idx += 1
 	      continue
 
 	    if (self.near_ends(end1, seg['end1']) or 
@@ -176,24 +182,34 @@ class ChainPaths(inkex.Effect):
 
 	    if self.near_ends(end1, seg['end2']):
 	      # prepend seg to cur
-	      self.set_segment_done(seg['id'], seg['n'])
+	      self.set_segment_done(seg['id'], seg['n'], 'prepended to '+id+' '+str(cur_idx))
 	      cur = self.link_segments(seg['seg'], cur)
 	      end1=[cur[0][1][0],cur[0][1][1]]
-	    elif self.near_ends(end2, seg['end1']):
+	      segments_idx = 0
+	      continue
+
+	    if self.near_ends(end2, seg['end1']):
 	      # append seg to cur
-	      self.set_segment_done(seg['id'], seg['n'])
+	      self.set_segment_done(seg['id'], seg['n'], 'appended to '+id+' '+str(cur_idx))
 	      cur = self.link_segments(cur, seg['seg'])
 	      end2=[cur[-1][1][0],cur[-1][1][1]]
+	      segments_idx = 0
+	      continue
+	    
+	    segments_idx += 1
+
 	  new.append(cur)
 
       if not len(new):
         node.clear()
         # node.getparent().remove(node)
 	obsoleted += 1
+        print >>self.tty, "Path node obsoleted:", id
       else:
         remaining += 1
         node.set('d',cubicsuperpath.formatPath(new))
     print >>self.tty, "Path nodes obsoleted:", obsoleted, "\nPath nodes remaining:", remaining
+    print >>self.tty, "done", self.segments_done
 
 if __name__ == '__main__':
         e = ChainPaths()
