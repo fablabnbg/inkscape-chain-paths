@@ -30,7 +30,7 @@ Installation
 Copy the the folder silhouette and the two files chain_paths.inx and 
 chain_paths.py to your computer:
 
-SUSE
+Ubuntu / SUSE
 * ~/.config/inkscape/extensions/ or
 * /usr/share/inkscape/extensions/
 
