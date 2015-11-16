@@ -9,7 +9,7 @@
   <param name="epsilon" type="float" min="0.0" max="999.0" _gui-text="Max. distance to connect [mm]">0.01</param>
   <param name="snap" type="boolean" _gui-text="Snap end-points together when connecting">false</param>
   <!-- Keep in sync with chain_paths.py line 16 __version__ = ... -->
-  <param name="about_version" type="description">Version 0.1</param>
+  <param name="about_version" type="description">Version 0.2</param>
 
   <effect needs-live-preview="false" >
     <object-type>path</object-type>

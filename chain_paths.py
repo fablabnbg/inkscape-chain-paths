@@ -12,8 +12,11 @@
 # - http://code.google.com/p/eggbotcode/
 #
 # 2015-11-15 jw, V0.1 -- initial draught
+# 2015-11-16 jw, V0.2 -- fixed endpoints after chaining.
+#
+# TODO: nicolaus_flat.svg:path4729 gets reversed, but not chained
 
-__version__ = '0.1'	# Keep in sync with chain_paths.inx ca line 12
+__version__ = '0.2'	# Keep in sync with chain_paths.inx ca line 12
 __author__ = 'Juergen Weigert <juewei@fabfolk.com>'
 
 import sys, os, shutil, time, logging, tempfile
@@ -173,12 +176,14 @@ class ChainPaths(inkex.Effect):
 
 	    if self.near_ends(end1, seg['end2']):
 	      # prepend seg to cur
-	      cur = self.link_segments(seg['seg'], cur)
 	      self.set_segment_done(seg['id'], seg['n'])
+	      cur = self.link_segments(seg['seg'], cur)
+	      end1=[cur[0][1][0],cur[0][1][1]]
 	    elif self.near_ends(end2, seg['end1']):
 	      # append seg to cur
-	      cur = self.link_segments(cur, seg['seg'])
 	      self.set_segment_done(seg['id'], seg['n'])
+	      cur = self.link_segments(cur, seg['seg'])
+	      end2=[cur[-1][1][0],cur[-1][1][1]]
 	  new.append(cur)
 
       if not len(new):
