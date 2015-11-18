@@ -47,9 +47,14 @@ Windows (untested):
 * Extract to My Computer **C:\Program Files\Inkscape\share\extensions**
 
 
-Mac OS X (untested)
+Mac OS X:
+
+Copy the two files chain_paths.inx and chain_paths.py to your computer:
 * ~/.config/inkscape/extensions/ or
 *  /Applications/Inkscape.app/Contents/Resources/extensions/ .
+
+To get the files, you can right click on the 'RAW' button and use your file managers 'save as' function.
+Please check the size of the files. If the chain_paths.inx file is more than 1kb, or has more than 33 lines, you probably saved the webpage containing the file, instead of the file itself.
 
 
 
