@@ -21,7 +21,18 @@ __author__ = 'Juergen Weigert <juewei@fabfolk.com>'
 
 import sys, os, shutil, time, logging, tempfile, math
 
-# local library
+
+# search path, so that inkscape libraries are found when we are standalone.
+sys_platform = sys.platform.lower()
+if sys_platform.startswith('win'):	# windows
+  sys.path.append('C:\Program Files\Inkscape\share\extensions')
+elif sys_platform.startswith('darwin'):	# mac
+  sys.path.append('/Applications/Inkscape.app/Contents/Resources/extensions')
+else:   				# linux
+  # if sys_platform.startswith('linux'):
+  sys.path.append('/usr/share/inkscape/extensions')
+
+# inkscape libraries
 import inkex
 import cubicsuperpath
 
@@ -71,6 +82,7 @@ class ChainPaths(inkex.Effect):
           type='float', dest='chain_epsilon', default=0.01, help="Max. distance to connect [mm]")
 
   def version(self):
+    print "hiuhu"
     return __version__
   def author(self):
     return __author__
