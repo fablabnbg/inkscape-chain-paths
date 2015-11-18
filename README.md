@@ -24,7 +24,7 @@ Paths never fork. This means, that if there are three or more path ends at the s
 Installation
 ------------
 
-Copy the the folder silhouette and the two files chain_paths.inx and 
+Copy the two files chain_paths.inx and 
 chain_paths.py to your computer:
 
 Ubuntu / SUSE
