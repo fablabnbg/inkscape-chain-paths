@@ -38,7 +38,7 @@ Arch Linux:
 * sudo python2 setup.py build && sudo python2 setup.py install
 * sudo cp chain_paths.* /usr/share/inkscape/extensions/
 
-Windows (untested): 
+Windows: 
 * Download https://github.com/fablabnbg/inkscape-chain-paths/archive/master.zip
 * Navigate to your Downloads folder and double-click on **inkscape-chain-paths-master.zip**
 * Download and install the free test version of **winzip** from http://www.winzip.com, if needed.
