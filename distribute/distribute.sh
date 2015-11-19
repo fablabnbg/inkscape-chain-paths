@@ -17,6 +17,18 @@ cp ../*.py $name/
 cp ../*.inx $name/
 
 
+echo "****************************************************************"
+echo "Ubuntu Version: For Building you must have checkinstall and dpkg"
+echo "and no VisiCut installation may be installed."
+echo "Build Ubuntu Version (Y/n)?"
+read answer
+if [ "$answer" != "n" ]
+then
+  (cd deb && ./dist.sh $name $VERSION ..)
+fi
+
+
+
 echo ""
 echo "****************************************************************"
 echo "Windows Version: Needs nsis"
@@ -24,21 +36,7 @@ echo "Build Windows Version (Y/n)?"
 read answer
 if [ "$answer" != "n" ]
 then
-  echo "Creating Windows installer"
-  [ -d wintmp ] && rm -rf wintmp
-  mkdir wintmp
-  cp -r windows/* wintmp/
-  [ -d wintmp/stream ] || mkdir wintmp/stream
-  cp -r visicut/* wintmp/stream/
-  cat windows/installer.nsi|sed s#VERSION#"$VERSION"#g > wintmp/installer.nsi
-  cp ../tools/inkscape_extension/* wintmp/
-  cat ../tools/inkscape_extension/visicut_export.py|sed 's#"visicut"#"visicut.exe"#g' > wintmp/visicut_export.py
-  pushd wintmp
-  makensis installer.nsi > /dev/null || exit 1
-  popd
-  mv wintmp/setup.exe $name-$VERSION-Windows-Installer.exe || exit 1
-  zip $name-$VERSION-Windows-Installer.zip $name-$VERSION-Windows-Installer.exe	# for github upload
-  rm -rf wintmp
+  (cd windows && ./dist.sh $name $VERSION ..)
 fi
 
 
@@ -63,27 +61,6 @@ then
   zip -r VisiCutMac-$VERSION.zip VisiCut.app > /dev/null || exit 1
   echo "Cleaning up..."
   rm -rf VisiCut.app
-fi
-
-echo "Dir:$(pwd)"
-echo "****************************************************************"
-echo "Ubuntu Version: For Building you must have checkinstall and dpkg"
-echo "and no VisiCut installation may be installed."
-echo "Build Ubuntu Version (Y/n)?"
-read answer
-if [ "$answer" != "n" ]
-then
-  pushd .
-  cp linux/description-pak ../
-  cd ..
-  # hide doc directory from checkinstall
-  # mv doc doctmp
-  test -f /usr/bin/visicut && { echo "error: please first uninstall visicut"; exit 1; }
-  fakeroot checkinstall --fstrans --reset-uid --type debian --install=no -y --pkgname visicut --pkgversion $VERSION --arch all --pkglicense LGPL --pkggroup other --pkgsource "http://visicut.org" --pkgaltsource "https://github.com/t-oster/VisiCut" --pakdir distribute/ --maintainer "'Thomas Oster <thomas.oster@rwth-aachen.de>'" --requires "bash,java-runtime,potrace" make install -e PREFIX=/usr > /dev/null || { echo "error"; exit 1; }
-  rm description-pak
-  rm -rf doc-pak
-  # mv doctmp doc
-  popd
 fi
 
 echo "Dir: $(pwd)"
