@@ -15,10 +15,10 @@ Usage
 -----
 Select multiple pathlike objects. If the status line shows you different object types,
 then use "Path -> Object to Path". This is needed as we operate only on paths only. 
-Then select "Extensions -> Chain Paths" to open the settings dialog.
+Then select "Extensions -> Modify Path -> Chain Paths" to open the settings dialog.
 You can choose the maximum endpoint distance for path ends to be linked, and the combination method: snap the points together, or create a linking path segment.
 
-Paths never fork. This means, that if there are three or more path ends at the same location, only two are chained together. The others are left unchanged.
+Note, that paths never fork. This means, that if there are three or more path ends at the same location, only two are chained together. The others are left unchanged.
 
 
 Installation
