@@ -15,12 +15,16 @@
 # 2015-11-16 jw, V0.2 -- fixed endpoints after chaining.
 # 2015-11-16 jw, V0.3 -- all possible chains connected. Yeah
 # 2015-11-16 jw, V0.4 -- gui fully functional.
+# 2015-11-26 jw, V0.5 -- HACK to resolve some self-reversing path segments.
+#	https://github.com/fablabnbg/inkscape-chain-paths/issues/1
 
-__version__ = '0.4'	# Keep in sync with chain_paths.inx ca line 22
+__version__ = '0.5'	# Keep in sync with chain_paths.inx ca line 22
 __author__ = 'Juergen Weigert <juewei@fabfolk.com>'
 
 import sys, os, shutil, time, logging, tempfile, math
 
+#debug = True
+debug = False
 
 # search path, so that inkscape libraries are found when we are standalone.
 sys_platform = sys.platform.lower()
@@ -39,8 +43,6 @@ import cubicsuperpath
 inkex.localize()
 
 from optparse import SUPPRESS_HELP
-
-debug = False
 
 def uutounit(self,nn,uu):
   try:
@@ -181,7 +183,19 @@ class ChainPaths(inkex.Effect):
 	# this is a path of three points. All the bezier handles are included. the Structure is:
 	# [[handle0_x, point0, handle0_1], [handle1_0, point1, handle1_2], [handle2_1, point2, handle2_x]]
         if debug: print >>self.tty, "   sub="+str(sub)
-	segments.append({'id': id, 'n': sub_idx, 'end1': [sub[0][1][0],sub[0][1][1]], 'end2':[sub[-1][1][0],sub[-1][1][1]], 'seg': sub})
+	end1=[sub[0][1][0],sub[0][1][1]]
+	end2=[sub[-1][1][0],sub[-1][1][1]]
+
+	while ((len(sub) > 1) and self.near_ends(end1, end2)):
+	  if debug: print >>self.tty, "splitting self-reversing path, length:", len(sub)
+	  ## We split the path and generate more snippets.
+	  splitp=[sub[-2][1][0],sub[-2][1][1]]
+	  segments.append({'id': id, 'n': sub_idx, 'end1': splitp, 'end2':end2, 'seg': [sub[-2],sub[-1]]})
+	  sub_idx += 1
+	  sub.pop()
+	  end2=splitp
+
+	segments.append({'id': id, 'n': sub_idx, 'end1': end1, 'end2':end2, 'seg': sub})
       if node.get(inkex.addNS('type','sodipodi')):
         del node.attrib[inkex.addNS('type', 'sodipodi')]
     if debug: print >>self.tty, "-------- seen:"
