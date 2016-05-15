@@ -1,0 +1,6 @@
+An inkscape extension to combine paths. Like really combining path snippets into longer paths. The stock inkscape path operation "combine" does not do that. It only creates a single path object consisting of multiple distinct segments.
+
+Many commercial CAD packages create object contours consisting of separate path snippets using adjacent end points. Such objects cannot be used in path operations like "add", "intersect", "difference", as they are technically a set of objects, rather than a single stroke.
+
+This extension forms a longer path from multiple shorter path segments. It is irrelevant if the path segments are separate path objects in inkscape, or if the path segments belong to the same path object. If two path segments have an end point in common, or if their end points are close together, they are linked together to form a longer path. It is optional weather the linking end points meld into a single common point, or if an optional straight line ('chain link') fills the gap, if any. The maximum distance for end points is a user setting. Usually a fraction of a millimeter works fine.
+

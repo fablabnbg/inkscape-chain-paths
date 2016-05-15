@@ -3,17 +3,19 @@
 
 name=$1
 vers=$2
-out=$3
-test -z "$out" && out=.
+url=http://github.com/fablabnbg/inkscape-chain-paths
+requires="bash"
 
-[ -d tmp ] && rm -rf tmp
-mkdir tmp
-# cp -r files/* tmp/
-sed -i -e s@VERSION@"$vers"@g tmp/installer.nsi
+tmp=../out
 
-fakeroot checkinstall --fstrans --reset-uid --type debian --install=no -y --pkgname $name --pkgversion $vers --arch all --pkglicense LGPL --pkggroup other --pkgsource "http://github.com/fablabnbg/inkscape-chain-paths" --pkgaltsource "http://fablab-nuernberg.de" --pakdir tmp/ --maintainer "'Juergen Weigert <juewei@fabfolk.com>'" --requires "bash" make install -e PREFIX=/usr > /dev/null || { echo "error"; exit 1; }
-
-mkdir -p $out
-mv *.deb $out
-rm -rf tmp
+[ -d $tmp ] && rm -rf $tmp/*.deb
+mkdir $tmp
+cd files
+fakeroot checkinstall --fstrans --reset-uid --type debian \
+  --install=no -y --pkgname $name --pkgversion $vers --arch all \
+  --pkglicense LGPL --pkggroup other --pakdir ../$tmp --pkgsource $url \
+  --pkgaltsource "http://fablab-nuernberg.de" \
+  --maintainer "'Juergen Weigert (juewei@fabmail.org)'" \
+  --requires "$requires" make install \
+  -e PREFIX=/usr > /dev/null || { echo "error"; exit 1; }
 
