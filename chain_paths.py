@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # Inkscape extension making long continuous paths from shorter pieces.
-# (C) 2015 juewei@fabfolk.com
+# (C) 2015 juewei@fabmail.org
 #
 # code snippets visited to learn the extension 'effect' interface:
 # - convert2dashes.py
@@ -19,7 +19,7 @@
 #	https://github.com/fablabnbg/inkscape-chain-paths/issues/1
 
 __version__ = '0.5'	# Keep in sync with chain_paths.inx ca line 22
-__author__ = 'Juergen Weigert <juewei@fabfolk.com>'
+__author__ = 'Juergen Weigert <juewei@fabmail.org>'
 
 import sys, os, shutil, time, logging, tempfile, math
 
