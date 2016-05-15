@@ -67,12 +67,13 @@ class ChainPaths(inkex.Effect):
     self.min_missed_distance_sq = None
     self.chained_count = 0
 
-    self.dumpname= os.path.join(tempfile.gettempdir(), "chain_paths.dump")
-
     try:
       self.tty = open("/dev/tty", 'w')
     except:
-      self.tty = open(os.devnull, 'w')  # '/dev/null' for POSIX, 'nul' for Windows.
+      try:
+        self.tty = open("CON:", 'w')	# windows. Does this work???
+      except:
+        self.tty = open(os.devnull, 'w')  # '/dev/null' for POSIX, 'nul' for Windows.
     if debug: print >>self.tty, "__init__"
 
     self.OptionParser.add_option('-V', '--version',
