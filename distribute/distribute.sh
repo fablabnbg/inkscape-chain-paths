@@ -26,6 +26,7 @@ read answer
 if [ "$answer" != "n" ]
 then
   cp -a $name/* deb/files
+  rm -f deb/files/setup.py
   (cd deb && sh ./dist.sh $name $VERSION)
 fi
 

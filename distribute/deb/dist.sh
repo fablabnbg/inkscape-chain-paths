@@ -19,3 +19,4 @@ fakeroot checkinstall --fstrans --reset-uid --type debian \
   --requires "$requires" make install \
   -e PREFIX=/usr > /dev/null || { echo "error"; exit 1; }
 
+cd ..; rm files/*
