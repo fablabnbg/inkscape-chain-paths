@@ -16,23 +16,24 @@
 # 2015-11-16 jw, V0.3 -- all possible chains connected. Yeah
 # 2015-11-16 jw, V0.4 -- gui fully functional.
 # 2015-11-26 jw, V0.5 -- HACK to resolve some self-reversing path segments.
-#	https://github.com/fablabnbg/inkscape-chain-paths/issues/1
+#        https://github.com/fablabnbg/inkscape-chain-paths/issues/1
+# 2020-04-10 jw, V0.6 -- Close paths correctly. Self reversing path hack was too eager.
 
-__version__ = '0.5'	# Keep in sync with chain_paths.inx ca line 22
+__version__ = '0.6'        # Keep in sync with chain_paths.inx ca line 22
 __author__ = 'Juergen Weigert <juewei@fabmail.org>'
 
 import sys, os, shutil, time, logging, tempfile, math
 
-#debug = True
-debug = False
+debug = True
+#debug = False
 
 # search path, so that inkscape libraries are found when we are standalone.
 sys_platform = sys.platform.lower()
-if sys_platform.startswith('win'):	# windows
+if sys_platform.startswith('win'):        # windows
   sys.path.append('C:\Program Files\Inkscape\share\extensions')
-elif sys_platform.startswith('darwin'):	# mac
+elif sys_platform.startswith('darwin'):        # mac
   sys.path.append('/Applications/Inkscape.app/Contents/Resources/extensions')
-else:   				# linux
+else:                                   # linux
   # if sys_platform.startswith('linux'):
   sys.path.append('/usr/share/inkscape/extensions')
 
@@ -44,11 +45,11 @@ inkex.localize()
 
 from optparse import SUPPRESS_HELP
 
-def uutounit(self,nn,uu):
+def uutounit(self, nn, uu):
   try:
-    return self.uutounit(nn,uu)		# inkscape 0.91
+    return self.uutounit(nn, uu)                # inkscape 0.91
   except:
-    return inkex.uutounit(nn,uu)	# inkscape 0.48
+    return inkex.uutounit(nn, uu)        # inkscape 0.48
 
 class ChainPaths(inkex.Effect):
   """
@@ -71,14 +72,14 @@ class ChainPaths(inkex.Effect):
       self.tty = open("/dev/tty", 'w')
     except:
       try:
-        self.tty = open("CON:", 'w')	# windows. Does this work???
+        self.tty = open("CON:", 'w')        # windows. Does this work???
       except:
         self.tty = open(os.devnull, 'w')  # '/dev/null' for POSIX, 'nul' for Windows.
     if debug: print >>self.tty, "__init__"
 
     self.OptionParser.add_option('-V', '--version',
           action = 'store_const', const=True, dest='version', default=False,
-          help='Just print version number ("'+__version__+'") and exit.')
+          help = 'Just print version number ("' + __version__ + '") and exit.')
     self.OptionParser.add_option('-s', '--snap', action='store', dest='snap_ends', type='inkbool', default=True, help='snap end-points together when connecting')
     self.OptionParser.add_option('-u', '--units', action='store', dest="units", type="string", default="mm", help="measurement unit for epsilon")
     self.OptionParser.add_option('-e', '--epsilon', action='store',
@@ -128,9 +129,9 @@ class ChainPaths(inkex.Effect):
       p2 = seg2[0]
       # fuse p1 and p2 to create one new point:
       # first handle from p1, point coordinates averaged, second handle from p2
-      seg.append([ [ p1[0][0]             ,  p1[0][1]             ],
-                   [(p1[1][0]+p2[1][0])*.5, (p1[1][1]+p2[1][1])*.5],
-		   [          p2[2][0]    ,           p2[2][1]    ] ])
+      seg.append([ [  p1[0][0]                 ,  p1[0][1]                  ],
+                   [ (p1[1][0] + p2[1][0]) * .5, (p1[1][1] + p2[1][1]) * .5 ],
+                   [             p2[2][0]      ,             p2[2][1]       ] ])
       seg.extend(seg2[1:])
     else:
       seg = seg1[:]
@@ -163,7 +164,7 @@ class ChainPaths(inkex.Effect):
 
     if self.options.snap_ends     is not None: self.snap_ends     = self.options.snap_ends
     if self.options.chain_epsilon is not None: self.chain_epsilon = self.options.chain_epsilon
-    if self.chain_epsilon < 0.001: self.chain_epsilon = 0.001	# keep a minimum.
+    if self.chain_epsilon < 0.001: self.chain_epsilon = 0.001        # keep a minimum.
     self.eps_sq = self.chain_epsilon * self.unit_factor * self.chain_epsilon * self.unit_factor
 
     if not len(self.selected.items()):
@@ -172,36 +173,35 @@ class ChainPaths(inkex.Effect):
 
     segments = []
     for id, node in self.selected.iteritems():
-      if node.tag != inkex.addNS('path','svg'):
-        inkex.errormsg(_("Object "+id+" is not a path. Try\n  - Path->Object to Path\n  - Object->Ungroup"))
+      if node.tag != inkex.addNS('path', 'svg'):
+        inkex.errormsg(_("Object " + id + " is not a path. Try\n  - Path->Object to Path\n  - Object->Ungroup"))
         return
-      if debug: print >>self.tty, "id="+str(id), "tag="+str(node.tag)
+      if debug: print >>self.tty, "id=" + str(id), "tag=" + str(node.tag)
       path_d = cubicsuperpath.parsePath(node.get('d'))
       sub_idx = -1
       for sub in path_d:
         sub_idx += 1
-	# sub=[[[200.0, 300.0], [200.0, 300.0], [175.0, 290.0]], [[175.0, 265.0], [220.37694, 256.99876], [175.0, 240.0]], [[175.0, 215.0], [200.0, 200.0], [200.0, 200.0]]]
-	# this is a path of three points. All the bezier handles are included. the Structure is:
-	# [[handle0_x, point0, handle0_1], [handle1_0, point1, handle1_2], [handle2_1, point2, handle2_x]]
-        if debug: print >>self.tty, "   sub="+str(sub)
-	end1=[sub[0][1][0],sub[0][1][1]]
-	end2=[sub[-1][1][0],sub[-1][1][1]]
+        # sub = [[[200.0, 300.0], [200.0, 300.0], [175.0, 290.0]], [[175.0, 265.0], [220.37694, 256.99876], [175.0, 240.0]], [[175.0, 215.0], [200.0, 200.0], [200.0, 200.0]]]
+        # this is a path of three points. All the bezier handles are included. the Structure is:
+        # [[handle0_OUT, point0, handle0_1], [handle1_0, point1, handle1_2], [handle2_1, point2, handle2_OUT]]
+        # the _OUT handles at the end of the path are ignored. The data structure has them identical to their points.
+        #
+        if debug: print >>self.tty, "   sub=" + str(sub)
+        end1 = [sub[ 0][1][0], sub[ 0][1][1]]
+        end2 = [sub[-1][1][0], sub[-1][1][1]]
 
-	while ((len(sub) > 1) and self.near_ends(end1, end2)):
-	  if debug: print >>self.tty, "splitting self-reversing path, length:", len(sub)
-	  ## We split the path and generate more snippets.
-	  splitp=[sub[-2][1][0],sub[-2][1][1]]
-	  segments.append({'id': id, 'n': sub_idx, 'end1': splitp, 'end2':end2, 'seg': [sub[-2],sub[-1]]})
-	  sub_idx += 1
-	  sub.pop()
-	  end2=splitp
+        # Removes self revesals when building candidate segments list.
+        if ((len(sub) == 3) and self.near_ends(end1, end2)):
+          if debug: print >>self.tty, "dropping segment from self-reversing path, length:", len(sub)
+          sub.pop()
+          end2 = [sub[-1][1][0], sub[-1][1][1]]
 
-	segments.append({'id': id, 'n': sub_idx, 'end1': end1, 'end2':end2, 'seg': sub})
-      if node.get(inkex.addNS('type','sodipodi')):
+        segments.append({'id': id, 'n': sub_idx, 'end1': end1, 'end2':end2, 'seg': sub})
+      if node.get(inkex.addNS('type', 'sodipodi')):
         del node.attrib[inkex.addNS('type', 'sodipodi')]
     if debug: print >>self.tty, "-------- seen:"
     for s in segments:
-      if debug: print >>self.tty, s['id'],s['n'],s['end1'],s['end2']
+      if debug: print >>self.tty, s['id'], s['n'], s['end1'], s['end2']
 
     # chain the segments
     obsoleted = 0
@@ -209,62 +209,72 @@ class ChainPaths(inkex.Effect):
     for id, node in self.selected.iteritems():
       # path_style = simplestyle.parseStyle(node.get('style'))
       path_d = cubicsuperpath.parsePath(node.get('d'))
-      new=[]
+      new = []
       cur_idx = -1
-      for cur in path_d:
+      for chain in path_d:
         cur_idx += 1
-	if not self.is_segment_done(id, cur_idx):
-	  # quadratic algorithm: we check both ends of the current segment.
-	  # If one of them is near another known end from the segments list, we
-	  # chain this segment to the current segment and remove it from the
-	  # list,
-	  # end1-end1 or end2-end2: The new segment is reversed.
-	  # end1-end2: The new segment is prepended to the current segment.
-	  # end2-end1: The new segment is appended to the current segment.
-	  self.set_segment_done(id, cur_idx, "output")	# do not cross with ourselves.
-	  end1=[cur[0][1][0],cur[0][1][1]]
-	  end2=[cur[-1][1][0],cur[-1][1][1]]
-	  segments_idx = 0
-	  while segments_idx < len(segments):
-	    seg = segments[segments_idx]
-	    if self.is_segment_done(seg['id'], seg['n']):
-	      segments_idx += 1
-	      continue
+        if not self.is_segment_done(id, cur_idx):
+          # quadratic algorithm: we check both ends of the current segment.
+          # If one of them is near another known end from the segments list, we
+          # chain this segment to the current segment and remove it from the
+          # list,
+          # end1-end1 or end2-end2: The new segment is reversed.
+          # end1-end2: The new segment is prepended to the current segment.
+          # end2-end1: The new segment is appended to the current segment.
+          self.set_segment_done(id, cur_idx, "output")        # do not cross with ourselves.
+          end1 = [chain[ 0][1][0], chain[ 0][1][1]]
+          end2 = [chain[-1][1][0], chain[-1][1][1]]
 
-	    if (self.near_ends(end1, seg['end1']) or
-	        self.near_ends(end2, seg['end2'])):
-	      seg['seg'] = self.reverse_segment(seg['seg'])
-	      seg['end1'],seg['end2'] = seg['end2'],seg['end1']
-	      if debug: print >>self.tty, "reversed seg", seg['id'], seg['n']
+          # Removes self revesals when doing the actual chain operations.
+          if ((len(chain) == 3) and self.near_ends(end1, end2)):
+            chain.pop()
+            end2 = [chain[-1][1][0], chain[-1][1][1]]
 
-	    if self.near_ends(end1, seg['end2']):
-	      # prepend seg to cur
-	      self.set_segment_done(seg['id'], seg['n'], 'prepended to '+id+' '+str(cur_idx))
-	      cur = self.link_segments(seg['seg'], cur)
-	      end1=[cur[0][1][0],cur[0][1][1]]
-	      segments_idx = 0
-	      continue
+          segments_idx = 0
+          while segments_idx < len(segments):
+            seg = segments[segments_idx]
+            if self.is_segment_done(seg['id'], seg['n']):
+              segments_idx += 1
+              continue
 
-	    if self.near_ends(end2, seg['end1']):
-	      # append seg to cur
-	      self.set_segment_done(seg['id'], seg['n'], 'appended to '+id+' '+str(cur_idx))
-	      cur = self.link_segments(cur, seg['seg'])
-	      end2=[cur[-1][1][0],cur[-1][1][1]]
-	      segments_idx = 0
-	      continue
+            if (self.near_ends(end1, seg['end1']) or
+                self.near_ends(end2, seg['end2'])):
+              seg['seg'] = self.reverse_segment(seg['seg'])
+              seg['end1'], seg['end2'] = seg['end2'], seg['end1']
+              if debug: print >>self.tty, "reversed seg", seg['id'], seg['n']
 
-	    segments_idx += 1
+            if self.near_ends(end1, seg['end2']):
+              # prepend seg to chain
+              self.set_segment_done(seg['id'], seg['n'], 'prepended to ' + id + ' ' + str(cur_idx))
+              chain = self.link_segments(seg['seg'], chain)
+              end1 = [chain[0][1][0], chain[0][1][1]]
+              segments_idx = 0          # this chain changed. re-visit all candidate
+              continue
 
-	  new.append(cur)
+            if self.near_ends(end2, seg['end1']):
+              # append seg to chain
+              self.set_segment_done(seg['id'], seg['n'], 'appended to ' + id + ' ' + str(cur_idx))
+              chain = self.link_segments(chain, seg['seg'])
+              end2 = [chain[-1][1][0], chain[-1][1][1]]
+              segments_idx = 0          # this chain changed. re-visit all candidate
+              continue
+
+            segments_idx += 1
+
+          # Now all joinable segments are joined.
+          # Finally, we can check, if the resulting path is a closed path:
+          # Closing a path here, isolates it from the rest.
+          # But as we prefer to make the chain as long as possible, we close late.
+          new.append(chain)
 
       if not len(new):
         # node.clear()
         node.getparent().remove(node)
-	obsoleted += 1
+        obsoleted += 1
         if debug: print >>self.tty, "Path node obsoleted:", id
       else:
         remaining += 1
-        node.set('d',cubicsuperpath.formatPath(new))
+        node.set('d', cubicsuperpath.formatPath(new))
 
     # statistics:
     print >>self.tty, "Path nodes obsoleted:", obsoleted, "\nPath nodes remaining:", remaining
