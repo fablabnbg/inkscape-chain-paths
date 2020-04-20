@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# 
+#
 # sudo zypper in python-setuptools
 # http://docs.python.org/2/distutils/setupscript.html#installing-additional-files
 #
+
+from __future__ import print_function
 import sys,os,glob,re
 
 from distutils.core import setup
@@ -13,7 +15,7 @@ import chain_paths 	# for author(), version()
 e = chain_paths.ChainPaths()
 m = re.match('(.*)\s+<(.*)>', e.author())
 
-# print ('.',['Makefile'] + glob.glob('chain_paths*'))
+# print('.',['Makefile'] + glob.glob('chain_paths*'))
 
 class PyTest(TestCommand):
     def finalize_options(self):
@@ -49,5 +51,5 @@ setup(name='chain-paths',
       long_description="".join(open('README.md').readlines()),
       # tests_require=['pytest', 'scipy'],
       #packages=['pyPdf','reportlab.pdfgen','reportlab.lib.colors','pygame.font' ],
-# 
+#
 )

@@ -14,10 +14,11 @@
 	<option value="pt">pt</option>
 	<option value="px">px</option></param>
   <param name="snap" type="boolean" _gui-text="Snap connecting ends together">false</param>
+  <param name="close" type="boolean" _gui-text="Close loops (start/end of the same path)">true</param>
   <!-- Keep in sync with chain_paths.py line 19 __version__ = ... -->
   <param name="about_version" type="description">
-  
-  
+
+
   https://github.com/fablabnbg/inkscape-chain-paths
   Version 0.6</param>
 
