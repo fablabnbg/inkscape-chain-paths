@@ -25,6 +25,7 @@ echo "Build Ubuntu Version (Y/n)?"
 read answer
 if [ "$answer" != "n" ]
 then
+  mkdir -p deb/files
   cp -a $name/* deb/files
   rm -f deb/files/setup.py
   (cd deb && sh ./dist.sh $name $VERSION)
