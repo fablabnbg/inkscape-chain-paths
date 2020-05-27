@@ -20,11 +20,13 @@
 # 2020-04-10 jw, V0.6 -- Close paths correctly. Self reversing path hack was too eager.
 #        Workaround for cubicsuperpath.parsePath/formatPath limitation.
 #        Started python3 compatibility.
+# 2020-05-27 vi, V0.7 -- Upgrade to Inkscape 1.0. Write debug info to inkex debug dialog.
 
 from __future__ import print_function
 
-__version__ = '0.6'        # Keep in sync with chain_paths.inx ca line 22
+__version__ = '0.7'        # Keep in sync with chain_paths.inx ca line 22
 __author__ = 'Juergen Weigert <juergen@fabmail.org>'
+__credits__ = ['Juergen Weigert', 'Veronika Irvine']
 
 import sys, os, shutil, time, logging, tempfile, math
 import re
@@ -44,22 +46,22 @@ else:                                     # linux
 
 # inkscape libraries
 import inkex
-import cubicsuperpath
 
-inkex.localize()
+inkex.localization.localize()
 
 from optparse import SUPPRESS_HELP
 
 def uutounit(self, nn, uu):
   try:
-    return self.uutounit(nn, uu)                # inkscape 0.91
+    return self.svg.unittouu(str(nn)+uu)
   except:
-    return inkex.uutounit(nn, uu)        # inkscape 0.48
+    return inkex.unittouu(str(nn)+uu)
 
 class ChainPaths(inkex.Effect):
   """
   Inkscape Extension make long continuous paths from smaller parts
   """
+
   def __init__(self):
     # Call the base class constructor.
     inkex.Effect.__init__(self)
@@ -74,23 +76,11 @@ class ChainPaths(inkex.Effect):
     self.min_missed_distance_sq = None
     self.chained_count = 0
 
-    try:
-      self.tty = open("/dev/tty", 'w')
-    except:
-      try:
-        self.tty = open("CON:", 'w')        # windows. Does this work???
-      except:
-        self.tty = open(os.devnull, 'w')  # '/dev/null' for POSIX, 'nul' for Windows.
-    if debug: print("__init__", file=self.tty)
-
-    self.OptionParser.add_option('-V', '--version',
-          action = 'store_const', const=True, dest='version', default=False,
-          help = 'Just print version number ("' + __version__ + '") and exit.')
-    self.OptionParser.add_option('-s', '--snap', action='store', dest='snap_ends', type='inkbool', default=True, help='snap end-points together when connecting')
-    self.OptionParser.add_option('-c', '--close', action='store', dest='close_loops', type='inkbool', default=True, help='close loops (start/end of the same path)')
-    self.OptionParser.add_option('-u', '--units', action='store', dest="units", type="string", default="mm", help="measurement unit for epsilon")
-    self.OptionParser.add_option('-e', '--epsilon', action='store',
-          type='float', dest='chain_epsilon', default=0.01, help="Max. distance to connect [mm]")
+    self.arg_parser.add_argument('-V', '--version', dest='version', type=inkex.Boolean, default=False, help = 'Just print version number ("' + __version__ + '") and exit.')
+    self.arg_parser.add_argument('-s', '--snap', dest='snap_ends', type=inkex.Boolean, default=True, help='snap end-points together when connecting')
+    self.arg_parser.add_argument('-c', '--close', dest='close_loops', type=inkex.Boolean, default=True, help='close loops (start/end of the same path)')
+    self.arg_parser.add_argument('-u', '--units', dest="units", type=str, default="mm", help="measurement unit for epsilon")
+    self.arg_parser.add_argument('-e', '--epsilon', type=float, dest='chain_epsilon', default=0.01, help="Max. distance to connect [mm]")
 
   def version(self):
     return __version__
@@ -119,7 +109,7 @@ class ChainPaths(inkex.Effect):
     if not id in self.segments_done:
       self.segments_done[id] = {}
     self.segments_done[id][n] = True
-    if debug: print("done", id, n, msg, file=self.tty)
+    if debug: inkex.utils.debug("done "+str(id)+" "+str(n)+" "+msg)
 
   def is_segment_done(self, id, n):
     if not id in self.segments_done:
@@ -174,17 +164,18 @@ class ChainPaths(inkex.Effect):
     if self.chain_epsilon < 0.001: self.chain_epsilon = 0.001        # keep a minimum.
     self.eps_sq = self.chain_epsilon * self.unit_factor * self.chain_epsilon * self.unit_factor
 
-    if not len(self.selected.items()):
+    if not len(self.svg.selected.items()):
       inkex.errormsg(_("Please select one or more objects."))
       return
 
     segments = []
-    for id, node in self.selected.iteritems():
+    for id in self.svg.selected:
+      node = self.svg.selected[id]
       if node.tag != inkex.addNS('path', 'svg'):
         inkex.errormsg(_("Object " + id + " is not a path. Try\n  - Path->Object to Path\n  - Object->Ungroup"))
         return
-      if debug: print("id=" + str(id), "tag=" + str(node.tag), file=self.tty)
-      path_d = cubicsuperpath.parsePath(node.get('d'))
+      if debug: inkex.utils.debug("id=" + str(id) + ", tag=" + str(node.tag))
+      path_d = inkex.paths.CubicSuperPath(inkex.paths.Path(node.get('d')))
       sub_idx = -1
       for sub in path_d:
         sub_idx += 1
@@ -193,29 +184,30 @@ class ChainPaths(inkex.Effect):
         # [[handle0_OUT, point0, handle0_1], [handle1_0, point1, handle1_2], [handle2_1, point2, handle2_OUT]]
         # the _OUT handles at the end of the path are ignored. The data structure has them identical to their points.
         #
-        if debug: print("   sub=" + str(sub), file=self.tty)
+        if debug: inkex.utils.debug("   sub=" + str(sub))
         end1 = [sub[ 0][1][0], sub[ 0][1][1]]
         end2 = [sub[-1][1][0], sub[-1][1][1]]
 
         # Remove trivial self revesal when building candidate segments list.
         if ((len(sub) == 3) and self.near_ends(end1, end2)):
-          if debug: print("dropping segment from self-reversing path, length:", len(sub), file=self.tty)
+          if debug: inkex.utils.debug("dropping segment from self-reversing path, length:"+str(len(sub)))
           sub.pop()
           end2 = [sub[-1][1][0], sub[-1][1][1]]
 
         segments.append({'id': id, 'n': sub_idx, 'end1': end1, 'end2':end2, 'seg': sub})
       if node.get(inkex.addNS('type', 'sodipodi')):
         del node.attrib[inkex.addNS('type', 'sodipodi')]
-    if debug: print("-------- seen:", file=self.tty)
+    if debug: inkex.utils.debug("-------- seen: ")
     for s in segments:
-      if debug: print(s['id'], s['n'], s['end1'], s['end2'], file=self.tty)
+      if debug: inkex.utils.debug(str(s['id'])+", "+str(s['n'])+", "+str(s['end1'])+", "+str(s['end2']))
 
     # chain the segments
     obsoleted = 0
     remaining = 0
-    for id, node in self.selected.iteritems():
+    for id in self.svg.selected:
+      node = self.svg.selected[id]
       # path_style = simplestyle.parseStyle(node.get('style'))
-      path_d = cubicsuperpath.parsePath(node.get('d'))
+      path_d = inkex.paths.CubicSuperPath(inkex.paths.Path(node.get('d')))
       # ATTENTION: for parsePath() it is the same, if first and last point coincide, or if the path is really closed.
       path_closed = True if re.search("z\s*$", node.get('d')) else False
       new = []
@@ -250,7 +242,7 @@ class ChainPaths(inkex.Effect):
                 self.near_ends(end2, seg['end2'])):
               seg['seg'] = self.reverse_segment(seg['seg'])
               seg['end1'], seg['end2'] = seg['end2'], seg['end1']
-              if debug: print("reversed seg", seg['id'], seg['n'], file=self.tty)
+              if debug: inkex.utils.debug("reversed seg " + str(seg['id']) + ", "+str(seg['n']))
 
             if self.near_ends(end1, seg['end2']):
               # prepend seg to chain
@@ -275,7 +267,7 @@ class ChainPaths(inkex.Effect):
           # Closing a path here, isolates it from the rest.
           # But as we prefer to make the chain as long as possible, we close late.
           if self.near_ends(end1, end2) and not path_closed and self.close_loops:
-              if debug: print("closing closeable loop", id, file=self.tty)
+              if debug: inkex.utils.debug("closing closeable loop " +str(id))
               if self.snap_ends:
                   # move first point to mid position
                   x1n = (chain[0][1][0] + chain[-1][1][0]) * 0.5
@@ -284,7 +276,7 @@ class ChainPaths(inkex.Effect):
                   # merge handle of the last point to the handle of the first point
                   dx0e = chain[-1][0][0] - chain[-1][1][0]
                   dy0e = chain[-1][0][1] - chain[-1][1][1]
-                  if debug: print("handle diff: ", dx0e, dy0e, file=self.tty)
+                  if debug: inkex.utils.debug("handle diff: "+ str(dx0e) + str(dy0e))
                   # FIXME: this does not work. cubicsuperpath.formatPath() ignores this handle.
                   chain[0][0][0], chain[0][0][1] = x1n+dx0e, y1n+dy0e
                   # drop last point
@@ -299,23 +291,23 @@ class ChainPaths(inkex.Effect):
         # node.clear()
         node.getparent().remove(node)
         obsoleted += 1
-        if debug: print("Path node obsoleted:", id, file=self.tty)
+        if debug: inkex.utils.debug("Path node obsoleted: " +str(id))
       else:
         remaining += 1
         # BUG: All previously closed loops, are open, after we convert them back with cubicsuperpath.formatPath()
-        p_fmt = cubicsuperpath.formatPath(new)
+        p_fmt = str(inkex.paths.Path(inkex.paths.CubicSuperPath(new).to_path().to_arrays()))
         if path_closed: p_fmt += " z"
-        if debug: print("new path :", p_fmt, file=self.tty)
+        if debug: inkex.utils.debug("new path: "+str(p_fmt))
         node.set('d', p_fmt)
 
     # statistics:
-    if debug: print("Path nodes obsoleted:", obsoleted, "\nPath nodes remaining:", remaining, file=self.tty)
+    if debug: inkex.utils.debug("Path nodes obsoleted: "+str(obsoleted) + "\nPath nodes remaining:"+str(remaining))
     if self.min_missed_distance_sq is not None:
-      if debug: print("min_missed_distance:", math.sqrt(float(self.min_missed_distance_sq))/self.unit_factor, '>', self.chain_epsilon, self.options.units, file=self.tty)
-    if debug: print("Successful link operations: ", self.chained_count, file=self.tty)
+      if debug: inkex.utils.debug("min_missed_distance: "+str(math.sqrt(float(self.min_missed_distance_sq))/self.unit_factor)+'>'+str(self.chain_epsilon)+str(self.options.units))
+    if debug: inkex.utils.debug("Successful link operations: "+str(self.chained_count))
 
 if __name__ == '__main__':
         e = ChainPaths()
 
-        e.affect()
+        e.run()
         sys.exit(0)    # helps to keep the selection
