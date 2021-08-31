@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
   <_name>Chain Paths</_name>
-  <id>com.github.fablabnbg.inskscape-chain-paths</id>
+  <id>com.github.fablabnbg.inkscape-chain-paths</id>
   <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
   <dependency type="executable" location="extensions">inkex.py</dependency>
   <dependency type="executable" location="extensions">chain_paths.py</dependency>
@@ -20,7 +20,7 @@
 
 
   https://github.com/fablabnbg/inkscape-chain-paths
-  Version 0.6</param>
+  Version 0.7</param>
 
   <effect needs-live-preview="false" >
     <object-type>path</object-type>
